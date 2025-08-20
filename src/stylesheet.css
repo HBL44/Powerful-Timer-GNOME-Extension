@@ -1,0 +1,48 @@
+/* Powerful Timer Extension Styles */
+
+/* Panel icon styling */
+.system-status-icon {
+    size: 14px;
+}
+
+/* Square button */
+.square-button {
+    padding: 4px;
+    margin: 4px;
+    min-width: 20px;
+    border-radius: 4px;
+    background-color: rgba(200, 200, 200, 0.15);
+}
+
+.square-button:hover {
+    background-color: rgba(150, 150, 150, 0.3);
+}
+
+.square-button:active {
+    background-color: rgba(137, 137, 137, 0.5);
+}
+
+/* Circle button */
+.circle-button {
+    margin: 4px;
+    min-height: 30px;
+    min-width: 30px;
+    border-radius: 15px;
+    background-color: rgba(200, 200, 200, 0.15);
+}
+
+.circle-button:hover {
+    background-color: rgba(150, 150, 150, 0.3);
+}
+
+.circle-button:active {
+    background-color: rgba(137, 137, 137, 0.5);
+}
+
+/* Timer countdown display styling */
+.time-left-label {
+    font-weight: bold;
+    min-width: 60px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.9);
+}
