@@ -426,8 +426,10 @@ class TimerIndicator extends PanelMenu.Button {
 /**
  * Main extension class
  */
-export default class MediaPauseTimerExtension extends Extension {
+export default class PowerfulTimerExtension extends Extension {
+
     enable() {
+        this._settings = this.getSettings();
         this._indicator = new TimerIndicator();
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }

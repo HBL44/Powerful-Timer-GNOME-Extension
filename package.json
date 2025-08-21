@@ -3,7 +3,7 @@
     "version": "2.0.0",
     "description": "A GNOME Shell extension that provides a configurable timer to automatically pause media players",
     "scripts": {
-        "deploy": "scp src/* /home/$USER/.local/share/gnome-shell/extensions/powerful-timer@HBL44.github.com/"
+        "deploy": "cd powerful-timer@HBL44.github.com && glib-compile-schemas schemas/ && cd ../ && cp -r powerful-timer@HBL44.github.com/ /home/$USER/.local/share/gnome-shell/extensions/"
     },
     "keywords": [
         "gnome",
