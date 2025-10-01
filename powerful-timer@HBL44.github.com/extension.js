@@ -2,11 +2,31 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
-import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as 
+PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
+// Session Manager D-Bus interface
+const SessionManagerIface = '<node>\
+  <interface name="org.gnome.SessionManager">\
+    <method name="Inhibit">\
+      <arg type="s" direction="in" />\
+      <arg type="u" direction="in" />\
+      <arg type="s" direction="in" />\
+      <arg type="u" direction="in" />\
+      <arg type="u" direction="out" />\
+    </method>\
+    <method name="Uninhibit">\
+      <arg type="u" direction="in" />\
+    </method>\
+  </interface>\
+</node>';
+
+const SessionManagerProxy = Gio.DBusProxy.makeProxyWrapper(SessionManagerIface);
 
 // Configuration constants
 const TIMER_STEPS = [1, 5, 10, 30];
@@ -15,6 +35,8 @@ const DEFAULT_TIMER_MINUTES = 10;
 
 // Media player mapping for friendly names, [playerctl name, friendly name]
 const PLAYER_MAP = new Map([
+    ['none', 'None'],
+    ['all', 'All players'],
     ['spotify', 'Spotify'],
     ['ytmdesktop', 'YouTube Music Desktop'],
     ['vlc', 'VLC'],
@@ -36,13 +58,21 @@ const PLAYER_MAP = new Map([
  */
 const TimerIndicator = GObject.registerClass(
 class TimerIndicator extends PanelMenu.Button {
-    _init() {
-        super._init(0.0, _('Media Pause Timer'));
+    _init(settings) {
+        super._init(0.5, _('Media Pause Timer')); // 0.5 makes the popup window centered
 
+        this._settings = settings;
         this._initializeState();
         this._createPanelIcon();
         this._createMenu();
         this._bindEvents();
+        
+        // Initialize session manager
+        this.sessionManager = new SessionManagerProxy(
+            Gio.DBus.session, 
+            'org.gnome.SessionManager', 
+            '/org/gnome/SessionManager'
+        );
     }
 
     /**
@@ -54,7 +84,12 @@ class TimerIndicator extends PanelMenu.Button {
         this._timerId = null;
         this._paused = false;
         this._stepIndex = 0;
-        this._selectedPlayer = 'all';
+        if (this._settings.get_boolean('default-media-is-all')) {
+            this._selectedPlayer = 'all';
+        } else {
+            this._selectedPlayer = 'none';
+        }
+        this.cookie = null;
     }
 
     /**
@@ -272,6 +307,8 @@ class TimerIndicator extends PanelMenu.Button {
 
             // Add "All players" option
             sources.unshift({ name: 'All players', player: 'all' });
+            sources.unshift({ name: 'None', player: 'none' });
+
 
             sources.forEach(source => {
                 const friendlyName = this._getFriendlyPlayerName(source.name);
@@ -312,9 +349,8 @@ class TimerIndicator extends PanelMenu.Button {
      */
     _updateSourceMenuOrnaments() {
         this._sourceMenu._getMenuItems().forEach((menuItem, index) => {
-            const isSelected = index === 0 ? this._selectedPlayer === 'all' : 
-                             this._sourceMenu._getMenuItems()[index]?.label?.get_text() === 
-                             this._getFriendlyPlayerName(this._selectedPlayer);
+            const isSelected = (this._sourceMenu._getMenuItems()[index]?.label?.get_text() === 
+                                    this._getFriendlyPlayerName(this._selectedPlayer));
             menuItem.setOrnament(isSelected ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
         });
     }
@@ -344,10 +380,15 @@ class TimerIndicator extends PanelMenu.Button {
             return GLib.SOURCE_CONTINUE;
         });
 
-        Main.notify(
-            _('Timer Started'),
-            _('Media will pause in ') + this._selectedMinutes + _(' minutes')
-        );
+        if (this._settings.get_boolean('show-notifications')) {
+            Main.notify(
+                _('Timer Started'),
+                _('Media will pause in ') + this._selectedMinutes + _(' minutes')
+            );
+        }
+
+        // Inhibit system suspend if enabled
+        this.inhibit();
     }
 
     /**
@@ -381,6 +422,8 @@ class TimerIndicator extends PanelMenu.Button {
             GLib.source_remove(this._timerId);
             this._timerId = null;
         }
+        // Uninhibit system suspend when timer is cleared
+        this.uninhibit();
     }
 
     /**
@@ -413,22 +456,57 @@ class TimerIndicator extends PanelMenu.Button {
             : ['playerctl', '-a', 'pause'];
 
         try {
-            GLib.spawn_async(null, argv, null, GLib.SpawnFlags.SEARCH_PATH, null);
-            Main.notify(_('Timer Ended'), _('Media paused'));
+            if (this._selectedPlayer !== 'none') {
+                GLib.spawn_async(null, argv, null, GLib.SpawnFlags.SEARCH_PATH, null);
+            }
+            if (this._settings.get_boolean('show-notifications')) {
+                Main.notify(_('Timer Ended'), _('Media paused'));
+            }
         } catch (error) {
-            Main.notify(_('Error'), error.message);
+            if (this._settings.get_boolean('show-notifications')) {
+                Main.notify(_('Error'), error.message);
+            }
         }
 
-        this._resetTimerState();
+        // Stop the timer
+        this._stopTimer();
     }
+
+    inhibit() {
+        log("inhibit");
+        if (this._settings.get_boolean('enable-keep-awake')) {
+            this.sessionManager.InhibitRemote(
+                "powerful-timer@HBL44.github.com", 
+                0, 
+                "The Powerful Timer extension is preventing suspend", 
+                12, 
+                (cookie) => {
+                    this.cookie = cookie;
+                    log("inhibit2 - cookie: " + cookie);
+                }
+            );
+        }
+    }
+
+    uninhibit() {
+        log("uninhibit");
+        if (this.cookie) {
+            this.sessionManager.UninhibitRemote(this.cookie);
+            log("uninhibit2 - cookie: " + this.cookie);
+            this.cookie = null;
+        }
+    }
+    
 });
 
 /**
  * Main extension class
  */
-export default class MediaPauseTimerExtension extends Extension {
+export default class PowerfulTimerExtension extends Extension {
+
     enable() {
-        this._indicator = new TimerIndicator();
+        this._settings = this.getSettings();
+        this._indicator = new TimerIndicator(this._settings);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
     }
 

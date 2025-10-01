@@ -1,0 +1,12 @@
+{
+  "name": "Powerful Timer",
+  "description": "A GNOME Shell extension that provides a configurable timer.",
+  "uuid": "powerful-timer@HBL44.github.com",
+  "shell-version": [
+    "46", "47", "48", "49"
+  ],
+  "stylesheet": "stylesheet.css",
+  "settings-schema": "org.gnome.shell.extensions.powerful-timer",
+  "gettext-domain": "gnome-shell-extensions-powerful-timer",
+  "url": "https://github.com/HBL44/Powerful-Timer-GNOME-Extension"
+}

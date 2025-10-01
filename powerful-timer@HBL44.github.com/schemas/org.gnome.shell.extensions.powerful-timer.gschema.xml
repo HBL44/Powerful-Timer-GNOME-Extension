@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.powerful-timer" path="/org/gnome/shell/extensions/powerful-timer/">
+
+    <key name="show-notifications" type="b">
+      <default>true</default>
+      <summary>Do show notifications</summary>
+      <description>Whether to show notifications when the timer ends.</description>
+    </key>
+
+    <key name="enable-keep-awake" type="b">
+      <default>true</default>
+      <summary>Do keep awake</summary>
+      <description>Whether to keep the system awake while the timer is running, if the computer falls asleep the timer won't trigger.</description>
+    </key>
+
+    <key name="default-media-is-all" type="b">
+      <default>true</default>
+      <summary>Default to all media players</summary>
+      <description>Whether the default selected media player is 'All' or not.</description>
+    </key>
+
+  </schema>
+</schemalist>
