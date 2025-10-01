@@ -407,11 +407,23 @@ class TimerIndicator extends PanelMenu.Button {
     }
 
     /**
-     * Stop timer and reset state
+     * Stop timer, reset state and execute custom user defiend command if set
      */
     _stopTimer() {
         this._clearTimer();
         this._resetTimerState();
+
+        // Execute custom command if set
+        const customCommand = this._settings.get_string('custom-command').trim();
+        if (customCommand) {
+            try {
+                GLib.spawn_command_line_async(customCommand);
+            } catch (error) {
+                if (this._settings.get_boolean('show-notifications')) {
+                    Main.notify(_('Error executing custom command'), error.message);
+                }
+            }
+        }
     }
 
     /**
@@ -473,7 +485,6 @@ class TimerIndicator extends PanelMenu.Button {
     }
 
     inhibit() {
-        log("inhibit");
         if (this._settings.get_boolean('enable-keep-awake')) {
             this.sessionManager.InhibitRemote(
                 "powerful-timer@HBL44.github.com", 
@@ -482,17 +493,14 @@ class TimerIndicator extends PanelMenu.Button {
                 12, 
                 (cookie) => {
                     this.cookie = cookie;
-                    log("inhibit2 - cookie: " + cookie);
                 }
             );
         }
     }
 
     uninhibit() {
-        log("uninhibit");
         if (this.cookie) {
             this.sessionManager.UninhibitRemote(this.cookie);
-            log("uninhibit2 - cookie: " + this.cookie);
             this.cookie = null;
         }
     }

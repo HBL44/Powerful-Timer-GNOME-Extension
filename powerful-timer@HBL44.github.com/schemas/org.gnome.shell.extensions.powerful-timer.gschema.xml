@@ -20,5 +20,11 @@
       <description>Whether the default selected media player is 'All' or not.</description>
     </key>
 
+    <key name="custom-command" type="s">
+      <default>''</default>
+      <summary>Custom Command</summary>
+      <description>A custom command that the user can type in for specific actions.</description>
+    </key>
+
   </schema>
 </schemalist>

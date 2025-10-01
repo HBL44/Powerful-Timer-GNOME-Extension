@@ -56,6 +56,34 @@ export default class MyExtensionPrefs extends ExtensionPreferences {
             settings.set_boolean('default-media-is-all', w.active);
         });
 
+        // Custom command entry
+        const customCommandEntry = new Gtk.Entry({
+            placeholder_text: 'Enter custom command',
+        });
+
+        customCommandEntry.connect('changed', entry => {
+            settings.set_string('custom-command', entry.text);
+        });
+
+        // Set the initial value of the custom command entry from the schema
+        customCommandEntry.text = settings.get_string('custom-command');
+
+        // Add a title and description for the custom command entry
+        const customCommandLabel = new Gtk.Label({
+            label: '<b>Custom Command</b>',
+            use_markup: true,
+            halign: Gtk.Align.START,
+        });
+        const customCommandDescription = new Gtk.Label({
+            label: 'Additinal command to trigger when the timer ends.',
+            wrap: true,
+            halign: Gtk.Align.START,
+        });
+
+        // Add the labels and entry to the group
+        group.add(customCommandLabel);
+        group.add(customCommandDescription);
+        group.add(customCommandEntry);
         group.add(switchAwake);
         group.add(switchNotification);
         group.add(switchDefaultAll);
