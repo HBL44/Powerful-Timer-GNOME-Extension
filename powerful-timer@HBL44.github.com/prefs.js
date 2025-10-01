@@ -23,16 +23,41 @@ export default class MyExtensionPrefs extends ExtensionPreferences {
         });
         page.add(group);
 
-        // Example: switch row
-        const switchRow = new Adw.SwitchRow({
+
+        const switchNotification = new Adw.SwitchRow({
             title: 'Enable Notifications',
+            subtitle: 'Whether to show notifications when the timer ends.',
             active: settings.get_boolean('show-notifications'),
         });
 
-        switchRow.connect('notify::active', w => {
+        switchNotification.connect('notify::active', w => {
             settings.set_boolean('show-notifications', w.active);
         });
 
-        group.add(switchRow);
+
+        const switchAwake = new Adw.SwitchRow({
+            title: 'Do keep awake',
+            subtitle: 'Whether to keep the system awake while the timer is running, if the computer falls asleep the timer won\'t trigger.',
+            active: settings.get_boolean('enable-keep-awake'),
+        });
+
+        switchAwake.connect('notify::active', w => {
+            settings.set_boolean('enable-keep-awake', w.active);
+        });
+
+        
+        const switchDefaultAll = new Adw.SwitchRow({
+            title: 'Is the default selected media player All?',
+            subtitle: 'Whether the default selected media player is \'All\' or not.',
+            active: settings.get_boolean('default-media-is-all'),
+        });
+
+        switchDefaultAll.connect('notify::active', w => {
+            settings.set_boolean('default-media-is-all', w.active);
+        });
+
+        group.add(switchAwake);
+        group.add(switchNotification);
+        group.add(switchDefaultAll);
     }
 }
