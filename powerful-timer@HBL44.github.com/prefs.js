@@ -5,6 +5,7 @@ import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
 
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import { endOptionnalCommands } from './shared-commands.js';
 
 export default class MyExtensionPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -19,14 +20,14 @@ export default class MyExtensionPrefs extends ExtensionPreferences {
 
         // Group
         const group = new Adw.PreferencesGroup({
-            title: 'Options',
+            title: 'Settings',
         });
         page.add(group);
 
 
         const switchNotification = new Adw.SwitchRow({
             title: 'Enable Notifications',
-            subtitle: 'Whether to show notifications when the timer ends.',
+            subtitle: 'Whether to show notifications.',
             active: settings.get_boolean('show-notifications'),
         });
 
@@ -48,7 +49,7 @@ export default class MyExtensionPrefs extends ExtensionPreferences {
         
         const switchDefaultAll = new Adw.SwitchRow({
             title: 'Is the default selected media player All?',
-            subtitle: 'Whether the default selected media player is \'All\' or not.',
+            subtitle: 'Whether the default selected media player is \'All\' or \'None\'.',
             active: settings.get_boolean('default-media-is-all'),
         });
 
@@ -56,6 +57,49 @@ export default class MyExtensionPrefs extends ExtensionPreferences {
             settings.set_boolean('default-media-is-all', w.active);
         });
 
+
+        // Add a title to the available commands section
+        const commandsTitle = new Gtk.Label({
+            label: '<b>On Timer Ends Options</b>',
+            use_markup: true,
+            halign: Gtk.Align.START,
+        });
+
+        //Scrollable list of commands
+        const commandListBox = new Gtk.ListBox();
+        commandListBox.set_selection_mode(Gtk.SelectionMode.MULTIPLE);
+
+        endOptionnalCommands.forEach(({ label }) => {
+            const row = new Gtk.ListBoxRow();
+            const checkButton = new Gtk.CheckButton({ label });
+            checkButton.active = settings.get_strv('selected-timer-end-commands').includes(label);
+
+            checkButton.connect('toggled', button => {
+                const selectedCommands = settings.get_strv('selected-timer-end-commands');
+                if (button.active) {
+                    selectedCommands.push(label);
+                } else {
+                    const index = selectedCommands.indexOf(label);
+                    if (index > -1) {
+                        selectedCommands.splice(index, 1);
+                    }
+                }
+                settings.set_strv('selected-timer-end-commands', selectedCommands);
+            });
+
+            row.set_child(checkButton);
+            commandListBox.append(row);
+        });
+        
+        const scrollableList = new Gtk.ScrolledWindow({
+            vexpand: true,
+            hexpand: true,
+        });
+        scrollableList.set_child(commandListBox);
+        
+
+        group.add(commandsTitle);
+        group.add(scrollableList);
         group.add(switchAwake);
         group.add(switchNotification);
         group.add(switchDefaultAll);

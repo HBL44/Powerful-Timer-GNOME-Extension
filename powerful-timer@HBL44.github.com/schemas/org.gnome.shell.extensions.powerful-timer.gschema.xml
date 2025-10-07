@@ -20,5 +20,11 @@
       <description>Whether the default selected media player is 'All' or not.</description>
     </key>
 
+    <key name="selected-timer-end-commands" type="as">
+      <default>[]</default>
+      <summary>Selected Commands</summary>
+      <description>A list of commands/features selected by the user to execute when the timer ends.</description>
+    </key>
+
   </schema>
 </schemalist>
