@@ -12,12 +12,11 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 // Import shared commands
 import { OPTION_NAMES, endOptionnalCommands } from './shared-commands.js';
-import { TIMER_STEPS, MAX_TIMER_MINUTES, DEFAULT_TIMER_MINUTES, DEFAULT_TIMER_STEP_ID, PLAYER_MAP, SessionManagerIface, SessionManagerProxy} from './config.js';
+import { TIMER_STEPS, MAX_TIMER_MINUTES, DEFAULT_TIMER_MINUTES, DEFAULT_TIMER_STEP_ID, MIN_TIMER_MINUTES, PLAYER_MAP, SessionManagerIface, SessionManagerProxy} from './config.js';
 
 
 /**
  * Timer indicator for GNOME Shell panel
- * Provides media player pause timer functionality with configurable duration
  */
 const TimerIndicator = GObject.registerClass(
     class TimerIndicator extends PanelMenu.Button {
@@ -53,16 +52,18 @@ const TimerIndicator = GObject.registerClass(
             }
             this._cookie = null;
 
+
             // Update actions in COMMANDS to include extension.js-specific logic
             endOptionnalCommands[0].action = () => this._pauseMedia();
             endOptionnalCommands[1].action = () => Main.screenShield.lock(true);
             endOptionnalCommands[2].action = () => {
                 try {
-                    GLib.spawn_command_line_async('rfkill block bluetooth');
+                    GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, this._settings.get_int('bluetooth-kill-delay') * 60, () => {
+                        GLib.spawn_command_line_async('rfkill block bluetooth');
+                        return GLib.SOURCE_REMOVE;
+                    });
                 } catch (error) {
-                    if (this._settings.get_boolean('show-notifications')) {
-                        Main.notify(_('Error'), _('Failed to disable Bluetooth.'));
-                    }
+                    this._notify(_('Error'), _('Failed to disable Bluetooth.'));
                 }
             };
 
@@ -218,7 +219,9 @@ const TimerIndicator = GObject.registerClass(
             // Timer step button click event
             this._stepButton.connect('clicked', () => {
                 this._stepIndex = (this._stepIndex + 1) % TIMER_STEPS.length;
-                this._updateStepDisplay();
+                if (this._stepButton?.child) {
+                    this._stepButton.child.set_text(`${this._getCurrentStep()}m`);
+                }
             });
 
             // Click event on the plus and minus timer buttons
@@ -263,31 +266,12 @@ const TimerIndicator = GObject.registerClass(
             return TIMER_STEPS[this._stepIndex];
         }
 
-        /**
-         * Update step display
-         */
-        _updateStepDisplay() {
-            if (this._stepButton?.child) {
-                this._stepButton.child.set_text(`${this._getCurrentStep()}m`);
-            }
-        }
 
         /**
          * Adjust timer value by direction (-1 for decrease, 1 for increase)
          */
         _adjustTimer(direction) {
-            const step = this._getCurrentStep();
-            // Bound the new value to 1-2880 minutes
-            const newValue = Math.max(1, Math.min(this._selectedMinutes + (direction * step), MAX_TIMER_MINUTES));
-
-            this._selectedMinutes = newValue;
-            this._updateTimeDisplay();
-        }
-
-        /**
-         * Update time display
-         */
-        _updateTimeDisplay() {
+            this._selectedMinutes = Math.max(MIN_TIMER_MINUTES, Math.min(this._selectedMinutes + direction * this._getCurrentStep(), MAX_TIMER_MINUTES));
             this._timeLabel.set_text(`${this._selectedMinutes} min`);
         }
 
@@ -297,38 +281,41 @@ const TimerIndicator = GObject.registerClass(
         _refreshMediaSources() {
             this._sourceMenu.removeAll();
 
+            const sources = this._getMediaSources();
+            sources.forEach(({ name, player }) => {
+                const item = this._createSourceMenuItem(name, player);
+                this._sourceMenu.addMenuItem(item);
+            });
+        }
+
+        /**
+         * Fetches all the media sources available via playerctl
+         * @returns List of available media sources, each source is {name, player}
+         */
+        _getMediaSources() {
             try {
                 const [, out] = GLib.spawn_command_line_sync('playerctl -l');
                 const decoder = new TextDecoder('utf-8');
-                const sources = decoder.decode(out).trim().split('\n')
-                    .filter(player => player.trim())
-                    .map(player => ({ name: player, player: player }));
-
-                // Add "All players" option
-                sources.unshift({ name: 'All players', player: 'all' });
-                sources.unshift({ name: 'None', player: 'none' });
-
-
-                sources.forEach(source => {
-                    const friendlyName = this._getFriendlyPlayerName(source.name);
-                    const isSelected = this._selectedPlayer === source.player;
-
-                    const item = new PopupMenu.PopupMenuItem(friendlyName);
-                    item.setOrnament(isSelected ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
-
-                    item.connect('activate', () => {
-                        this._selectedPlayer = source.player;
-                        this._updateSourceMenuOrnaments();
-                    });
-
-                    this._sourceMenu.addMenuItem(item);
-                });
-            } catch (error) {
-                // Add fallback option if playerctl fails
-                const fallbackItem = new PopupMenu.PopupMenuItem('No players available');
-                fallbackItem.setOrnament(PopupMenu.Ornament.NONE);
-                this._sourceMenu.addMenuItem(fallbackItem);
+                const players = decoder.decode(out).trim().split('\n').filter(Boolean);
+                return [{ name: 'None', player: 'none' }, { name: 'All players', player: 'all' }, ...players.map(player => ({ name: player, player }))];
+            } catch {
+                this._notify(_('Error'), _('Failed to fetch media players. Ensure playerctl is installed.'));
+                return [{ name: 'No players available', player: 'none' }];
             }
+        }
+
+        _createSourceMenuItem(name, player) {
+            const friendlyName = this._getFriendlyPlayerName(name);
+            const isSelected = this._selectedPlayer === player;
+
+            const item = new PopupMenu.PopupMenuItem(friendlyName);
+            item.setOrnament(isSelected ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+            item.connect('activate', () => {
+                this._selectedPlayer = player;
+                this._updateSourceMenuOrnaments();
+            });
+
+            return item;
         }
 
         /**
@@ -379,30 +366,37 @@ const TimerIndicator = GObject.registerClass(
                 return GLib.SOURCE_CONTINUE;
             });
 
-            if (this._settings.get_boolean('show-notifications')) {
-                Main.notify(
-                    _('Timer Started'),
-                    _('Media will pause in ') + this._selectedMinutes + _(' minutes')
-                );
-            }
+            this._notify(
+                _('Timer Started'),
+                _('Media will pause in ') + this._selectedMinutes + _(' minutes')
+            );
 
             // Inhibit system suspend if enabled
-            this.inhibit();
+            if (this._settings.get_boolean('enable-keep-awake')) {
+                this._sessionManager.InhibitRemote(
+                    "powerful-timer@HBL44.github.com",
+                    0,
+                    "The Powerful Timer GNOME extension is preventing suspend",
+                    12,
+                    (cookie) => {
+                        this._cookie = cookie;
+                    }
+                );
+            }
         }
 
         /**
          * Toggle timer pause/resume
          */
         _togglePlayPause() {
-            if (!this._timerId && this._remainingSeconds === 0) {
+            if (!this._timerId) {
                 this._startTimer();
-                return;
+            } else {
+                this._paused = !this._paused;
+                this._playPauseBtn.child.set_icon_name(
+                    this._paused ? 'media-playback-start-symbolic' : 'media-playback-pause-symbolic'
+                );
             }
-
-            this._paused = !this._paused;
-            this._playPauseBtn.child.set_icon_name(
-                this._paused ? 'media-playback-start-symbolic' : 'media-playback-pause-symbolic'
-            );
         }
 
         /**
@@ -422,7 +416,10 @@ const TimerIndicator = GObject.registerClass(
                 this._timerId = null;
             }
             // Uninhibit system suspend when timer is cleared
-            this.uninhibit();
+            if (this._cookie) {
+                this._sessionManager.UninhibitRemote(this._cookie);
+                this._cookie = null;
+            }
         }
 
         /**
@@ -450,40 +447,17 @@ const TimerIndicator = GObject.registerClass(
          * Handle timer completion
          */
         _endTimer() {
-            endOptionnalCommands.forEach(({ label, action, state }) => {
-                if (state) {
-                    try {
-                        action();
-                    } catch (error) {
-                    }
-                }
+            endOptionnalCommands.filter(cmd => cmd.state).forEach(cmd => {
+                try {
+                    cmd.action();
+                } catch {}
             });
-
             this._stopTimer();
         }
 
-        inhibit() {
-            if (this._settings.get_boolean('enable-keep-awake')) {
-                this._sessionManager.InhibitRemote(
-                    "powerful-timer@HBL44.github.com",
-                    0,
-                    "The Powerful Timer extension is preventing suspend",
-                    12,
-                    (cookie) => {
-                        this._cookie = cookie;
-                    }
-                );
-            }
-        }
-
-        uninhibit() {
-            if (this._cookie) {
-                this._sessionManager.UninhibitRemote(this._cookie);
-                this._cookie = null;
-            }
-        }
-
-        // Implement the _pauseMedia function
+        /**
+         * Pause media playback using playerctl
+         */
         _pauseMedia() {
             const argv = this._selectedPlayer !== 'all'
                 ? ['playerctl', `--player=${this._selectedPlayer}`, 'pause']
@@ -493,13 +467,20 @@ const TimerIndicator = GObject.registerClass(
                 if (this._selectedPlayer !== 'none') {
                     GLib.spawn_async(null, argv, null, GLib.SpawnFlags.SEARCH_PATH, null);
                 }
-                if (this._settings.get_boolean('show-notifications')) {
-                    Main.notify(_('Timer Ended'), _('Media paused'));
-                }
+                this._notify(_('Timer Ended'), _('Media paused'));
             } catch (error) {
-                if (this._settings.get_boolean('show-notifications')) {
-                    Main.notify(_('Error'), error.message);
-                }
+                this._notify(_('Error'), error.message);
+            }
+        }
+
+        /**
+         * Notify the user depending on settings
+         * @param {*} title 
+         * @param {*} message 
+         */
+        _notify(title, message) {
+            if (this._settings.get_boolean('show-notifications')) {
+                Main.notify(title, message);
             }
         }
     });
@@ -509,7 +490,6 @@ const TimerIndicator = GObject.registerClass(
  */
 export default class PowerfulTimerExtension extends Extension {
 
-    // Initialize the extension and set up the media selection dropdown visibility
     enable() {
         this._settings = this.getSettings();
         this._indicator = new TimerIndicator(this);

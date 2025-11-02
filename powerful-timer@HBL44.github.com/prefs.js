@@ -97,11 +97,35 @@ export default class MyExtensionPrefs extends ExtensionPreferences {
         });
         scrollableList.set_child(commandListBox);
         
+        // Bluetooth Kill Delay Row
+        const bluetoothKillDelayRow = new Adw.ActionRow({
+            title: 'Bluetooth Kill Delay',
+            subtitle: 'Set the delay (in minutes) before disabling Bluetooth when the timer ends. ONLY applies if Bluetooth disabling is selected.',
+        });
+
+        const bluetoothKillDelaySpinButton = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 60,
+                step_increment: 1,
+            }),
+            value: settings.get_int('bluetooth-kill-delay'),
+        });
+
+        bluetoothKillDelaySpinButton.connect('value-changed', (spinButton) => {
+            settings.set_int('bluetooth-kill-delay', spinButton.get_value_as_int());
+        });
+
+        bluetoothKillDelayRow.add_suffix(bluetoothKillDelaySpinButton);
+        bluetoothKillDelayRow.activatable_widget = bluetoothKillDelaySpinButton;
+
+
 
         group.add(commandsTitle);
         group.add(scrollableList);
         group.add(switchAwake);
         group.add(switchNotification);
         group.add(switchDefaultAll);
+        group.add(bluetoothKillDelayRow);
     }
 }
